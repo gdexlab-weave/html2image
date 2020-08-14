@@ -6,8 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/unrolled/render" // or "gopkg.in/unrolled/render.v1"
-	"gopkg.in/russross/blackfriday.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,6 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	wkhtmltoimage "github.com/ninetwentyfour/go-wkhtmltoimage"
+	"github.com/unrolled/render" // or "gopkg.in/unrolled/render.v1"
+	"gopkg.in/russross/blackfriday.v2"
 )
 
 type ImageRender struct {
@@ -36,7 +38,7 @@ func md2html(url string) string {
 	return string(blackfriday.Run(body))
 }
 
-func (r *ImageRender) BuildImageOptions(req *http.Request, format string) (ImageOptions, error) {
+func (r *ImageRender) BuildImageOptions(req *http.Request, format string) (wkhtmltoimage.ImageOptions, error) {
 	path := req.URL.Path
 	url := req.Form.Get("url")
 	reqIP := req.Header.Get("X-Forwarded-For")
@@ -47,7 +49,7 @@ func (r *ImageRender) BuildImageOptions(req *http.Request, format string) (Image
 			html = req.Form.Get("html")
 
 			if len(html) == 0 {
-				return ImageOptions{}, errors.New("url can't be null")
+				return wkhtmltoimage.ImageOptions{}, errors.New("url can't be null")
 			} else {
 				url = "-"
 				log.Println("render for:", html, " RemoteIP:", reqIP)
@@ -73,17 +75,17 @@ func (r *ImageRender) BuildImageOptions(req *http.Request, format string) (Image
 				url = "-"
 			} else {
 				log.Println("Prevent \"nomd\" in force markdown mode. url:", url, " RemoteIP:", reqIP)
-				return ImageOptions{}, errors.New("\"nomd\" cannot be true in force markdown mode")
+				return wkhtmltoimage.ImageOptions{}, errors.New("\"nomd\" cannot be true in force markdown mode")
 
 			}
 		} else {
 			log.Println("Prevent rendering ", url, "in force markdown mode.", " RemoteIP:", reqIP)
-			return ImageOptions{}, errors.New("url must be end with \".md\"in force markdown mode")
+			return wkhtmltoimage.ImageOptions{}, errors.New("url must be end with \".md\"in force markdown mode")
 		}
 	}
 
-	c := ImageOptions{BinaryPath: *r.BinaryPath,
-		Input: url, HTML: html, Format: format}
+	c := wkhtmltoimage.ImageOptions{BinaryPath: *r.BinaryPath,
+		Input: url, Html: html, Format: format}
 
 	width, err := strconv.Atoi(req.Form.Get("width"))
 	if err == nil {
@@ -114,7 +116,7 @@ func (r *ImageRender) RenderBytes(w http.ResponseWriter, req *http.Request, form
 		w.Write([]byte(fmt.Sprint(err)))
 		return
 	}
-	out, err := GenerateImage(&c)
+	out, err := wkhtmltoimage.GenerateImage(&c)
 	if err != nil {
 		w.Write([]byte(fmt.Sprint(err)))
 		return
@@ -149,11 +151,11 @@ func (r *ImageRender) RenderJSON(httpRender *render.Render, w http.ResponseWrite
 
 	today := time.Now().Format("06/01/02/")
 	os.MkdirAll(*imgRootDir+today, 0755)
-	imgPath := today + contentToMd5(c.Input+c.HTML) + "." + format
+	imgPath := today + contentToMd5(c.Input+c.Html) + "." + format
 	c.Output = *imgRootDir + imgPath
 	log.Println("generate file path:", c.Output)
 	if !checkFileIsExist(c.Output) {
-		_, err = GenerateImage(&c)
+		_, err = wkhtmltoimage.GenerateImage(&c)
 		if err != nil {
 			httpRender.Text(w, http.StatusInternalServerError, fmt.Sprint(err))
 			return
